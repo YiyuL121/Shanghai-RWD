@@ -1,0 +1,235 @@
+##### This code perform regressions of treatment efficacy (as result of TREIV-PKPD Fitting) on Patients' characteristcs ####
+##### Also perform the regression of model parameters on Patients' characteristcs #####
+##### Fig 4, S-Fig-4, S-Fig-5 ######
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(GGally)
+library(tidyr)
+library(finalfit)
+library(emmeans)
+```
+
+```{r}
+estimate <- read.csv("C:/Users/YIYU.LIAO/OneDrive - Nanyang Technological University/Desktop/Shanghai data/run/rpart_pkpd/prf_nocov_r3_new_correctdose/IndividualParameters/estimatedIndividualParameters.txt")
+estimate <- estimate %>% filter(antiviral == 1)
+```
+
+# read in individual efficacy which was calculated in previous section
+```{r}
+ind_eff <- read.csv("ind_eff.csv")
+ind_eff
+estimate_merge <- merge(estimate, ind_eff, by = "id")
+estimate_merge
+```
+
+######## Plot S-Fig-4 ###########
+```{r}
+numeric_est <- estimate_merge %>% dplyr::select(log10beta_mode,log10pi_mode,log10phi_mode,log10rho_mode,delta_mode,tau_mode,  prf_mode, E_ave,T_treat,
+                                                age,comorbidity_sum,vax_doses) %>% rename(
+                                                  beta = log10beta_mode,
+                                                  pi = log10pi_mode,
+                                                  phi = log10phi_mode,
+                                                  rho = log10rho_mode,
+                                                  delta = delta_mode,
+                                                 # tau = tau_mode,
+                                                  prf = prf_mode
+                                                )
+```
+```{r}
+numeric_est_long <- numeric_est  %>% dplyr::select(beta,pi,phi,rho,delta,prf) %>% rename(log10beta = beta, log10pi = pi, log10rho=rho,log10phi = phi)%>% pivot_longer(cols = everything(), names_to = "parameter", values_to = "value") 
+
+numeric_est_long$parameter <- factor(numeric_est_long$parameter, levels = c("log10beta", "log10pi", "log10rho","log10phi","delta","prf" ))
+
+
+
+
+hist_pop <- ggplot(numeric_est_long, aes(x = value)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  facet_wrap(~ parameter, scales = "free") +
+   coord_cartesian(ylim = c(0, 60)) +    
+  theme_minimal() +
+  labs( x = NULL, y = "Count")  +
+  theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='none',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+ theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 12),        # X-axis label font size
+  axis.title.y = element_text(size = 12),        # Y-axis label font size
+  axis.text = element_text(size = 12) ,           # Axis tick labels font size
+ strip.text = element_blank(),
+  #strip.background = element_rect(fill = "lightblue", colour = "black"),
+  plot.margin = margin(t = 1, r = 1, b = 1, l = 1, unit = "cm")
+) + theme(panel.spacing = unit(1.5, "cm"))
+hist_pop
+```
+
+######################################################################################################################
+############ Final-fit to conduct regressions of model parameters and efficacy on patients' characteristics ##########
+######################################################################################################################
+
+# Standardize the order of characteristics
+```{r}
+estimate_merge$age_cat <- factor(estimate_merge$age_cat, levels = c("18-64", ">=65"))
+estimate_merge$comorbidity_cat <- factor(estimate_merge$comorbidity_cat, levels = c("0", ">=1"))
+estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
+```
+
+####### Final fit ############
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'log10beta_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'log10pi_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'log10rho_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'log10phi_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'delta_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'tau_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'prf_mode'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+```{r}
+explanatory = c(  "age_cat" ,"sex","comorbidity_cat",  "vaccination")
+dependent = 'E_ave'
+estimate_merge %>%
+  finalfit(dependent, explanatory, metrics=TRUE) 
+```
+
+######## Redo the multivariate regression of efficacy and plot the boxplot ############
+############################
+######## Figure 4 ##########
+############################
+
+######### 4-A: Vaccination status ##########
+```{r}
+estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
+
+linear_vac_cat <- lm(E_ave ~ vaccination, data = estimate_merge)
+emm <- emmeans(linear_age_cat, ~ vaccination)
+emm_df <- as.data.frame(emm)
+
+estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
+
+vax_cat_plot <- ggplot(estimate_merge) +
+  geom_boxplot(aes(x = vaccination, y = E_ave),outlier.shape = NA, fill = "grey90", color = "grey40") +
+  geom_jitter(aes(x = vaccination, y = E_ave),width = 0.1, alpha = 0.2, color = "darkred") +
+  geom_point(data = emm_df, aes(x = vaccination, y = emmean, group = 1), 
+             color = "blue", size = 3) +
+  geom_errorbar(data = emm_df,
+                aes(x = vaccination, ymin = lower.CL, ymax = upper.CL, group = 1),
+                width = 0.3, color = "blue", size = 1) +
+  geom_line(data = emm_df, aes(x = vaccination, y = emmean, group = 1), size = 0.7,
+            color = "blue", linetype = "dashed") +
+  labs(#title = "Efficacy by Age Group",
+       x = "Vaccination Group",
+       y = "Efficacy") +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 14),        # X-axis label font size
+  axis.title.y = element_text(size = 14),        # Y-axis label font size
+  axis.text = element_text(size = 14) ,           # Axis tick labels font size
+  legend.title = element_blank(),  # Legend title font size
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) 
+vax_cat_plot
+```
+########## 4-B: Age ##########
+```{r}
+linear_age_cat <- lm(E_ave ~ age_cat +sex + vaccination +comorbidity_cat, data = estimate_merge)
+summary(linear_age_cat)
+# Get model-predicted means and CIs
+emm <- emmeans(linear_age_cat, ~ age_cat)
+emm_df <- as.data.frame(emm)
+
+estimate_merge$age_cat <- factor(estimate_merge$age_cat, levels = c("18-64", ">=65"))
+
+age_cat_plot <- ggplot(estimate_merge) +
+  geom_boxplot(aes(x = age_cat, y = E_ave), outlier.shape = NA, fill = "grey90", color = "grey40") +
+  geom_jitter(aes(x = age_cat, y = E_ave), width = 0.1, alpha = 0.2, color = "darkred") +
+  geom_point(data = emm_df, aes(x = age_cat, y = emmean, group = 1), 
+             color = "blue", size = 3) +
+  geom_errorbar(data = emm_df,
+                aes(x = age_cat, ymin = lower.CL, ymax = upper.CL, group = 1),
+                width = 0.3, color = "blue", size = 1) +
+  geom_line(data = emm_df, aes(x = age_cat, y = emmean, group = 1), size = 0.7,
+            color = "blue", linetype = "dashed") +
+  labs(#title = "Efficacy by Age Group",
+       x = "Age Group",
+       y = "Efficacy") +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 14),        # X-axis label font size
+  axis.title.y = element_text(size = 14),        # Y-axis label font size
+  axis.text = element_text(size = 14) ,           # Axis tick labels font size
+  legend.title = element_blank(),  # Legend title font size
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) 
+age_cat_plot
+```
+
