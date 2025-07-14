@@ -771,4 +771,203 @@ for (i in seq(1, length(unique(individual_fit_selected_2$num)), 120)) {
   
 }
 dev.off()
-```                              
+```    
+
+
+#############################################
+################## S-Figure-5 ###############
+#############################################
+```{r}
+estimate_raw <- read.csv("estimatedIndividualParameters.txt")
+estimate_raw$tau_mode <-  round(mean(estimate_raw$tau_mode),digit = 1)
+estimate_raw$T_treat[estimate_raw$antiviral == 1] <- round(mean(estimate_raw$T_treat[estimate_raw$antiviral == 1]), digits = 1)
+```
+
+####################################################################
+#### Function to compute CI based on a subgroup of data ############
+####################################################################
+```{r}
+ind_fit_plt2<-function(Estimated){
+  
+  Fit <- list()
+
+    S <- nrow(Estimated)
+
+    P <- matrix(NA,nrow=Tmax*(1/step_size)+1,ncol=S) #pre-sym and after-sym
+    #P <- matrix(NA,nrow=(Tmax+1),ncol=S)
+    for(j in 1:S){
+      pars <- Estimated[j,] #Est should be a mode parameter dataframe with correct orders of paramters
+      
+      out  <- Intfun_ind_pkpd(pars)
+      #out_pre  <- Covfun_pre(pars)
+      P[,j] <- out$aV1
+    }
+    
+    Min95  <- apply(P,1,function(x){quantile(x,0.005,na.rm = TRUE)})
+    Min90  <- apply(P,1,function(x){quantile(x,0.25,na.rm = TRUE)})
+    Max90  <- apply(P,1,function(x){quantile(x,0.75,na.rm = TRUE)})
+    Max95  <- apply(P,1,function(x){quantile(x,0.995,na.rm = TRUE)})
+    Mean50 <- apply(P,1,function(x){quantile(x,0.50,na.rm=T)})
+    fit <- cbind(times,Min95,Min90,Max90,Max95,Mean50)
+    
+    Fit <- data.frame(fit)
+    Fit$Min95[Fit$Min95 < -2] <- -2
+    Fit$Min90[Fit$Min90 < -2] <- -2
+    Fit$Group <- Estimated$antiviral[1]
+    Fit$treatment <- ifelse(Fit$Group == 1, "treated", "untreated")
+  return(Fit) }
+```
+##########################################################
+############### Stratification by vac status##############
+##########################################################
+```{r}
+full_ind <- subset(estimate_raw, vaccination == c("Full"))
+full_ind_t <- subset(full_ind, antiviral == 1)
+full_ind_t
+Booster_ind <- subset(estimate_raw, vaccination == c("Booster"))
+Booster_ind_t <- subset(Booster_ind, antiviral == 1)
+Booster_ind_t
+Not_Full_ind <- subset(estimate_raw, vaccination == c("Notfull"))
+Not_Full_ind_t <- subset(Not_Full_ind, antiviral == 1)
+Not_Full_ind_t
+Full_Booster_ind <- subset(estimate_raw, vaccination %in% c("Booster", "Full"))
+Full_Booster_ind_t <- subset(Full_Booster_ind, antiviral == 1)
+Full_Booster_ind_t
+```
+
+```{r}
+Full_treated <- ind_fit_plt2(full_ind_t[,c(16:22,38,36)])
+Not_Full_treated <- ind_fit_plt2(Not_Full_ind_t[,c(16:22,38,36)])
+Booster_treated <- ind_fit_plt2(Booster_ind_t[,c(16:22,38,36)])
+Full_Booster_treated <- ind_fit_plt2(Full_Booster_ind_t[,c(16:22,38,36)])
+```
+
+```{r}
+Full_treated$vaccination <- "Fully vaccinated"
+Not_Full_treated$vaccination <- "Not fully vaccinated"
+Booster_treated$vaccination <- "Booster shot"
+combined_vac <- rbind(Full_treated,Not_Full_treated,Booster_treated)
+combined_vac
+
+Full_Booster_treated$vaccination <- "Full vaccinated or Boosted"
+combined_vac_2 <- rbind(Full_Booster_treated,Not_Full_treated)
+combined_vac_2
+```
+
+```{r}
+# Create the plot
+vac_plot <- ggplot(combined_vac_2, aes(x = times, y = Mean50, fill = vaccination)) +
+  
+  geom_ribbon(aes(ymin = Min95, ymax = Max95, fill = vaccination), alpha = 0.12) +
+ # geom_ribbon(aes(ymin = Min90, ymax = Max90, fill = treatment), alpha = 0.17) +
+  geom_line(aes(color = vaccination),alpha = 0.8, linewidth = 0.75) +
+  #geom_vline(aes(xintercept = t_treat_since_inf,  color = t_treat),linetype = "dotted", linewidth = 1.2) +
+  geom_vline(aes(xintercept = 5.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_vline(aes(xintercept = 10.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_hline(aes(yintercept = 1.31),color = "grey",linetype = "dotted", size = 1) +
+  labs(
+    #title = "Visualization of Viral Load Trajectory",
+    x = "Days after Infection",
+    y = "log10 Viral Load (RNA copies/ml)",
+    
+  ) +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 14),        # X-axis label font size
+  axis.title.y = element_text(size = 14),        # Y-axis label font size
+  axis.text = element_text(size = 14) ,           # Axis tick labels font size
+  legend.title = element_blank(),  # Legend title font size
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) + ylim(-2,11) + xlim(0,30)
+vac_plot
+```
+##########################################################
+############### Stratification by age ####################
+##########################################################
+```{r}
+old_ind <- subset(estimate_raw, age_cat == ">=65")
+old_ind_t <- subset(old_ind, antiviral == 1)
+hist(old_ind$antiviral)
+old_ind_t
+old_ind_ut <- subset(old_ind, antiviral == 0)
+old_ind_ut
+young_ind <- subset(estimate_raw, age_cat == "18-64")
+young_ind_t <- subset(young_ind, antiviral == 1)
+hist(young_ind$antiviral)
+young_ind_t
+young_ind_ut <- subset(young_ind, antiviral == 0)
+young_ind_ut
+```
+```{r}
+old_untreated <- ind_fit_plt2(old_ind_ut[,c(16:22,38,36)])
+old_treated <- ind_fit_plt2(old_ind_t[,c(16:22,38,36)])
+young_untreated <- ind_fit_plt2(young_ind_ut[,c(16:22,38,36)])
+young_treated <- ind_fit_plt2(young_ind_t[,c(16:22,38,36)])
+```
+```{r}
+old_treated$age <- ">=65"
+old_untreated$age <- ">=65"
+young_untreated$age <- "18-64"
+young_treated$age <- "18-64"
+```
+```{r}
+old_combined <- rbind(old_untreated,old_treated)
+young_combined <- rbind(young_untreated,young_treated)
+
+age_treat <- rbind(old_treated,young_treated)
+age_untreat <- rbind(old_untreated,young_untreated)
+```
+
+```{r}
+age_plot <- ggplot(age_treat, aes(x = times, y = Mean50, fill = age)) +
+  
+  geom_ribbon(aes(ymin = Min95, ymax = Max95, fill = age), alpha = 0.12) +
+ # geom_ribbon(aes(ymin = Min90, ymax = Max90, fill = treatment), alpha = 0.17) +
+  geom_line(aes(color = age),alpha = 0.8, linewidth = 0.75) +
+  #geom_vline(aes(xintercept = t_treat_since_inf,  color = t_treat),linetype = "dotted", linewidth = 1.2) +
+  #geom_vline(aes(xintercept = t_treat_since_inf,  color = t_treat),linetype = "dotted", linewidth = 1.2) +
+  geom_vline(aes(xintercept = 5.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_vline(aes(xintercept = 10.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_hline(aes(yintercept = 1.31),color = "grey",linetype = "dotted", size = 1) +
+  labs(
+    #title = "Visualization of Viral Load Trajectory",
+    x = "Days after Infection",
+    y = "log10 Viral Load (RNA copies/ml)",
+    
+  ) +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 14),        # X-axis label font size
+  axis.title.y = element_text(size = 14),        # Y-axis label font size
+  axis.text = element_text(size = 14) ,           # Axis tick labels font size
+  legend.title = element_text(size = 14),  # Legend title font size
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) + ylim(-2,11) + xlim(0,30)
+age_plot
+```
