@@ -1,6 +1,6 @@
 ##### This code perform regressions of treatment efficacy (as result of TREIV-PKPD Fitting) on Patients' characteristcs ####
 ##### Also perform the regression of model parameters on Patients' characteristcs #####
-##### Fig 4, S-Fig-4, S-Fig-5 ######
+##### Fig 4, S-Fig-4, S-Fig-5, S-FIg-6 ######
 
 ```{r}
 library(dplyr)
@@ -9,10 +9,11 @@ library(GGally)
 library(tidyr)
 library(finalfit)
 library(emmeans)
+library(deSolve)
 ```
 
 ```{r}
-estimate <- read.csv("C:/Users/YIYU.LIAO/OneDrive - Nanyang Technological University/Desktop/Shanghai data/run/rpart_pkpd/prf_nocov_r3_new_correctdose/IndividualParameters/estimatedIndividualParameters.txt")
+estimate <- read.csv("estimatedIndividualParameters.txt")
 estimate <- estimate %>% filter(antiviral == 1)
 ```
 
@@ -20,10 +21,23 @@ estimate <- estimate %>% filter(antiviral == 1)
 ```{r}
 ind_eff <- read.csv("ind_eff.csv")
 ind_eff
-estimate_merge <- merge(estimate, ind_eff, by = "id")
-estimate_merge
 ```
 
+# Standardize the order of characteristics
+```{r}
+estimate_merge <- merge(estimate, ind_eff, by = "id")%>% mutate(
+  dose = case_when(
+    vaccination == "Booster"~ "3 doses",
+    vaccination == "Full"~ "2 doses",
+    vaccination == "Notfull"~ "less than 2 doses"
+  )
+)
+estimate_merge$age_cat <- factor(estimate_merge$age_cat, levels = c("18-64", ">=65"))
+estimate_merge$comorbidity_cat <- factor(estimate_merge$comorbidity_cat, levels = c("0", ">=1"))
+estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
+estimate_merge$dose <- factor(estimate_merge$dose, levels = c("less than 2 doses","2 doses","3 doses"))
+estimate_merge
+```
 ######## Plot S-Fig-4 ###########
 ```{r}
 numeric_est <- estimate_merge %>% dplyr::select(log10beta_mode,log10pi_mode,log10phi_mode,log10rho_mode,delta_mode,tau_mode,  prf_mode, E_ave,T_treat,
@@ -63,10 +77,10 @@ hist_pop <- ggplot(numeric_est_long, aes(x = value)) +
   theme_minimal() 
   ) +
  theme(
- # plot.title = element_text(size = 16),          # Title font size
-  axis.title.x = element_text(size = 12),        # X-axis label font size
-  axis.title.y = element_text(size = 12),        # Y-axis label font size
-  axis.text = element_text(size = 12) ,           # Axis tick labels font size
+ # plot.title = element_text(size = 16),         
+  axis.title.x = element_text(size = 12),       
+  axis.title.y = element_text(size = 12),       
+  axis.text = element_text(size = 12) ,         
  strip.text = element_blank(),
   #strip.background = element_rect(fill = "lightblue", colour = "black"),
   plot.margin = margin(t = 1, r = 1, b = 1, l = 1, unit = "cm")
@@ -78,12 +92,7 @@ hist_pop
 ############ Final-fit to conduct regressions of model parameters and efficacy on patients' characteristics ##########
 ######################################################################################################################
 
-# Standardize the order of characteristics
-```{r}
-estimate_merge$age_cat <- factor(estimate_merge$age_cat, levels = c("18-64", ">=65"))
-estimate_merge$comorbidity_cat <- factor(estimate_merge$comorbidity_cat, levels = c("0", ">=1"))
-estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
-```
+
 
 ####### Final fit ############
 ```{r}
@@ -140,61 +149,15 @@ estimate_merge %>%
 ######## Figure 4 ##########
 ############################
 
+```{r}
+# Refit the multivariate regression
+linear_age_vax <- lm(E_ave ~ age_cat +sex + dose +comorbidity_cat, data = estimate_merge)
+summary(linear_age_cat)
+```
 ######### 4-A: Vaccination status ##########
 ```{r}
-estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
-
-linear_vac_cat <- lm(E_ave ~ vaccination, data = estimate_merge)
-emm <- emmeans(linear_age_cat, ~ vaccination)
+emm <- emmeans(linear_age_vax, ~ age_cat)
 emm_df <- as.data.frame(emm)
-
-estimate_merge$vaccination <- factor(estimate_merge$vaccination, levels = c("Notfull", "Full", "Booster"))
-
-vax_cat_plot <- ggplot(estimate_merge) +
-  geom_boxplot(aes(x = vaccination, y = E_ave),outlier.shape = NA, fill = "grey90", color = "grey40") +
-  geom_jitter(aes(x = vaccination, y = E_ave),width = 0.1, alpha = 0.2, color = "darkred") +
-  geom_point(data = emm_df, aes(x = vaccination, y = emmean, group = 1), 
-             color = "blue", size = 3) +
-  geom_errorbar(data = emm_df,
-                aes(x = vaccination, ymin = lower.CL, ymax = upper.CL, group = 1),
-                width = 0.3, color = "blue", size = 1) +
-  geom_line(data = emm_df, aes(x = vaccination, y = emmean, group = 1), size = 0.7,
-            color = "blue", linetype = "dashed") +
-  labs(#title = "Efficacy by Age Group",
-       x = "Vaccination Group",
-       y = "Efficacy") +
-  theme_minimal() +
-   theme(axis.text = element_text(colour = "black"),
-        axis.ticks = element_line(colour = "black"),
-        axis.line = element_line(colour = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        legend.position='bottom',
-        axis.title.y = element_text(size=11,family="sans"),
-        axis.title.x = element_text(size=11,family="sans"),
-  theme_minimal() 
-  ) +
-  theme(
- # plot.title = element_text(size = 16),          # Title font size
-  axis.title.x = element_text(size = 14),        # X-axis label font size
-  axis.title.y = element_text(size = 14),        # Y-axis label font size
-  axis.text = element_text(size = 14) ,           # Axis tick labels font size
-  legend.title = element_blank(),  # Legend title font size
-  legend.text = element_text(size = 12),
-  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
-) 
-vax_cat_plot
-```
-########## 4-B: Age ##########
-```{r}
-linear_age_cat <- lm(E_ave ~ age_cat +sex + vaccination +comorbidity_cat, data = estimate_merge)
-summary(linear_age_cat)
-# Get model-predicted means and CIs
-emm <- emmeans(linear_age_cat, ~ age_cat)
-emm_df <- as.data.frame(emm)
-
-estimate_merge$age_cat <- factor(estimate_merge$age_cat, levels = c("18-64", ">=65"))
 
 age_cat_plot <- ggplot(estimate_merge) +
   geom_boxplot(aes(x = age_cat, y = E_ave), outlier.shape = NA, fill = "grey90", color = "grey40") +
@@ -222,14 +185,368 @@ age_cat_plot <- ggplot(estimate_merge) +
   theme_minimal() 
   ) +
   theme(
- # plot.title = element_text(size = 16),          # Title font size
-  axis.title.x = element_text(size = 14),        # X-axis label font size
-  axis.title.y = element_text(size = 14),        # Y-axis label font size
-  axis.text = element_text(size = 14) ,           # Axis tick labels font size
-  legend.title = element_blank(),  # Legend title font size
+ # plot.title = element_text(size = 16),         
+  axis.title.x = element_text(size = 14),       
+  axis.title.y = element_text(size = 14),        
+  axis.text = element_text(size = 14) ,           
+  legend.title = element_blank(), 
   legend.text = element_text(size = 12),
   plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
 ) 
 age_cat_plot
+```
+############### 4-B Doses #####################
+```{r}
+emm <- emmeans(linear_age_vax, ~ dose)
+emm_df <- as.data.frame(emm)
+
+vax_cat_plot <- ggplot(estimate_merge) +
+  geom_boxplot(aes(x = dose, y = E_ave),outlier.shape = NA, fill = "grey90", color = "grey40") +
+  geom_jitter(aes(x = dose, y = E_ave),width = 0.1, alpha = 0.2, color = "darkred") +
+  geom_point(data = emm_df, aes(x = dose, y = emmean, group = 1), 
+             color = "blue", size = 3) +
+  geom_errorbar(data = emm_df,
+                aes(x = dose, ymin = lower.CL, ymax = upper.CL, group = 1),
+                width = 0.3, color = "blue", size = 1) +
+  geom_line(data = emm_df, aes(x = dose, y = emmean, group = 1), size = 0.7,
+            color = "blue", linetype = "dashed") +
+  labs(#title = "Efficacy by Age Group",
+       x = "Vaccination Group",
+       y = "Efficacy") +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          
+  axis.title.x = element_text(size = 14),        
+  axis.title.y = element_text(size = 14),      
+  axis.text = element_text(size = 14) ,          
+  legend.title = element_blank(),  # Legend title font size
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) 
+vax_cat_plot
+```
+
+#####################################################
+################## S-Fig-5 ##########################
+#####################################################
+
+```{r}
+agedose_plot<- ggplot(data = estimate_merge, aes(x= age, y = E_ave, color = dose)) + 
+  
+  geom_point() +
+  labs(#title = "Efficacy by Age Group",
+       x = "Age",
+       y = "Efficacy",
+        color = "Vaccination Status") +
+  facet_wrap(~ dose) +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),          # Title font size
+  axis.title.x = element_text(size = 14),        # X-axis label font size
+  axis.title.y = element_text(size = 14),        # Y-axis label font size
+  axis.text = element_text(size = 14) ,           # Axis tick labels font size
+  legend.title = element_text(size = 14),  # Legend title font size
+  legend.text = element_text(size = 14),
+  strip.text = element_text(size = 14)
+                       ) +theme(panel.spacing = unit(0.3, "cm"),
+                                plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"))
+
+
+agedose_plot
+```
+
+#############################################################
+###################### S-Fig-6 ##############################
+#############################################################
+
+####### reload the full parameters
+####### Use the individual parameters to compute the "mean" trajecotry for each subgourp
+
+```{r}
+estimate_raw <- read.csv("estimatedIndividualParameters.txt")
+estimate_raw$tau_mode <-  round(mean(estimate_raw$tau_mode),digit = 1)
+estimate_raw$T_treat[estimate_raw$antiviral == 1] <- round(mean(estimate_raw$T_treat[estimate_raw$antiviral == 1]), digits = 1)
+estimate_raw
+```
+########## recall the ODE function ############
+```{r}
+Intfun_ind_pkpd <-function(pars){
+  
+
+  beta <- 10^as.numeric(pars[1])#MODE,
+  pi <- 10^as.numeric(pars[2])
+  phi <- 10^as.numeric(pars[3])
+  rho <- 10^as.numeric(pars[4])
+  delta <- as.numeric(pars[5])
+  tau <- as.numeric(pars[6])
+  prf <- as.numeric(pars[7])
+  
+  Antiviral <- as.numeric(pars[8])
+  t_treat <-as.numeric(pars[9])
+  
+  
+  # Fixed PKPD parameters from the paper
+   
+  E_max <- 0.999
+  K_e <- 9.98
+  K_PL <- 1.58
+  K_LP <- 1.22
+  K_CL <- 4.96
+  Vol <- 41743
+  MolMass <- 499.5
+  n <- 3.16
+  IC50 <- 0.083  # in µM (43.6 nM converted)
+  Dose <- 300     # in mg
+  
+  # Time settings
+  rec <- round(t_treat + tau, digit = 1)	  #
+  Tmin <- 0
+  Tmax <- 40
+  step_size <- 0.1
+  times <- seq(Tmin, Tmax, step_size)
+  
+
+
+  
+  treatment <- data.frame(times = times, h = rep(0, length(times)))
+  #treatment$h <- ifelse(times < rec, 0, 1)
+  treatment$h <- ifelse(times < rec | times > rec + 5, 0, 1) * Antiviral #5day treatment
+  
+  
+  h_t2 <- approxfun(treatment$times, treatment$h, rule = 2)
+  
+  dose_times <- seq(rec, rec + 4.5, by = 0.5)  # t_treat, t_treat+0.5, ..., t_treat+4.5
+  dose_events <- data.frame(var = "A_G", time = dose_times, value = Dose, method = "add")
+
+ derivs <- function(times, y, pars, h_t2) {
+    with(as.list(c(pars, y)), {
+      # Treatment indicator
+      h2 <- h_t2(times)
+      
+      # PK equations
+      dA_G <- -K_e * A_G
+      dA_P <- K_e * A_G + K_LP * A_L - (K_CL + K_PL) * A_P
+      dA_L <- K_PL * A_P - K_LP * A_L
+      
+      # Compute plasma concentration
+      C_P_mg_per_mL <- A_P / Vol
+      C_P_uM <- C_P_mg_per_mL * (1e6 / MolMass)
+      
+      # Compute efficacy (eps)
+      eps <- E_max * (C_P_uM^n) / ((prf * IC50)^n + C_P_uM^n)
+      
+      # Apply treatment window (eps_t)
+      eps_t <- ifelse(h2 == 1, eps, 0)
+      
+      # Viral dynamics equations
+      dT <- -beta * T * V - phi * I * T + rho * R
+      dR <- phi * I * T - rho * R
+      dE <- beta * T * V - 4 * E
+      dI <- 4 * E - delta * I
+      dV <- (1 - eps_t) * pi * I - 15 * V
+      
+      return(list(c(dT, dR, dE, dI, dV, dA_G, dA_P, dA_L), eps_t = eps_t))
+    })
+  }
+  
+  # Initial conditions
+  y <- c(T = 10^7, R = 0, E = 0, I = 0, V = 1, A_G = 0, A_P = 0, A_L = 0)
+  
+ out <- ode(y = y, times = round(times,digit=1), func = derivs, parms = pars, h_t2 = h_t2, events = list(data = dose_events), method = "bdf")
+  
+  out_df <- as.data.frame(cbind(time = out[,1], aV1 = log10(out[,6]), eps_t = out[,"eps_t"]))
+  
+  return(out_df)
+}
+
+```
+############# Function for plotting the mean ###############
+```{r}
+ Tmin <- 0
+  Tmax <- 40
+  step_size <- 0.1
+  times <- seq(Tmin, Tmax, step_size)
+ind_fit_plt2<-function(Estimated){
+  
+  Fit <- list()
+
+    S <- nrow(Estimated)
+
+    P <- matrix(NA,nrow=Tmax*(1/step_size)+1,ncol=S) #pre-sym and after-sym
+    #P <- matrix(NA,nrow=(Tmax+1),ncol=S)
+    for(j in 1:S){
+      pars <- Estimated[j,] #Est should be a mode parameter dataframe with correct orders of paramters
+      
+      out  <- Intfun_ind_pkpd(pars)
+      #out_pre  <- Covfun_pre(pars)
+      P[,j] <- out$aV1
+    }
+    
+    Min95  <- apply(P,1,function(x){quantile(x,0.005,na.rm = TRUE)})
+    Min90  <- apply(P,1,function(x){quantile(x,0.25,na.rm = TRUE)})
+    Max90  <- apply(P,1,function(x){quantile(x,0.75,na.rm = TRUE)})
+    Max95  <- apply(P,1,function(x){quantile(x,0.995,na.rm = TRUE)})
+    Mean50 <- apply(P,1,function(x){quantile(x,0.50,na.rm=T)})
+    fit <- cbind(times,Min95,Min90,Max90,Max95,Mean50)
+    
+    Fit <- data.frame(fit)
+    Fit$Min95[Fit$Min95 < -2] <- -2
+    Fit$Min90[Fit$Min90 < -2] <- -2
+    Fit$Group <- Estimated$antiviral[1]
+    Fit$treatment <- ifelse(Fit$Group == 1, "treated", "untreated")
+  return(Fit) }
+```
+#####################################
+############# S-Fig-6-A #############
+#####################################
+
+```{r}
+full_ind <- subset(estimate_raw, dose == c("2 doses"))
+full_ind_t <- subset(full_ind, antiviral == 1)
+full_ind_t
+Booster_ind <- subset(estimate_raw, dose == c("3 doses"))
+Booster_ind_t <- subset(Booster_ind, antiviral == 1)
+Booster_ind_t
+Not_Full_ind <- subset(estimate_raw, dose == c("less than 2 doses"))
+Not_Full_ind_t <- subset(Not_Full_ind, antiviral == 1)
+Not_Full_ind_t
+Full_Booster_ind <- subset(estimate_raw, dose %in% c("2 doses", "3 doses"))
+Full_Booster_ind_t <- subset(Full_Booster_ind, antiviral == 1)
+Full_Booster_ind_t
+```
+```{r}
+Full_treated <- ind_fit_plt2(full_ind_t[,c(16:22,38,36)])
+Not_Full_treated <- ind_fit_plt2(Not_Full_ind_t[,c(16:22,38,36)])
+Booster_treated <- ind_fit_plt2(Booster_ind_t[,c(16:22,38,36)])
+Full_Booster_treated <- ind_fit_plt2(Full_Booster_ind_t[,c(16:22,38,36)])
+```
+```{r}
+#### Merge the results and ready to plot
+Full_treated$vaccination <- "2 doses"
+Not_Full_treated$vaccination <- "less than 2 doses"
+Booster_treated$vaccination <- "3 doses"
+Full_Booster_treated$vaccination <- "2 or 3 doses"
+combined_vac <- rbind(Full_Booster_treated,Not_Full_treated)
+combined_vac
+```
+```{r}
+# Create the plot
+plot_pop2 <- ggplot(combined_vac, aes(x = times, y = Mean50, fill = vaccination)) +
+  
+  geom_ribbon(aes(ymin = Min95, ymax = Max95, fill = vaccination), alpha = 0.12) +
+  geom_line(aes(color = vaccination),alpha = 0.8, linewidth = 0.75) +
+  geom_vline(aes(xintercept = 5.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_vline(aes(xintercept = 10.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_hline(aes(yintercept = 1.31),color = "grey",linetype = "dotted", size = 1) +
+  labs(
+    x = "Days after Infection",
+    y = "log10 Viral Load (RNA copies/ml)",
+    
+  ) +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+  axis.title.x = element_text(size = 14),        
+  axis.title.y = element_text(size = 14),       
+  axis.text = element_text(size = 14) ,          
+  legend.title = element_blank(),  
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) + ylim(-2,11) + xlim(0,30)
+plot_pop2
+```
+
+##########################
+######S-Fig-6-B###########
+##########################
+```{r}
+old_ind <- subset(estimate_raw, age_cat == ">=65")
+old_ind_t <- subset(old_ind, antiviral == 1)
+old_ind_t
+young_ind <- subset(estimate_raw, age_cat == "18-64")
+young_ind_t <- subset(young_ind, antiviral == 1)
+young_ind_t
+```
+```{r}
+old_treated <- ind_fit_plt2(old_ind_t[,c(16:22,38,36)])
+young_treated <- ind_fit_plt2(young_ind_t[,c(16:22,38,36)])
+```
+```{r}
+old_treated$age <- ">=65"
+young_treated$age <- "18-64"
+```
+```{r}
+age_treat <- rbind(young_treated,old_treated)
+```
+```{r}
+age_treat$age <- factor(age_treat$age, levels = c("18-64", ">=65"))
+plot_pop2 <- ggplot(age_treat, aes(x = times, y = Mean50, fill = age)) +
+  
+  geom_ribbon(aes(ymin = Min95, ymax = Max95, fill = age), alpha = 0.12) +
+ # geom_ribbon(aes(ymin = Min90, ymax = Max90, fill = treatment), alpha = 0.17) +
+  geom_line(aes(color = age),alpha = 0.8, linewidth = 0.75) +
+  #geom_vline(aes(xintercept = t_treat_since_inf,  color = t_treat),linetype = "dotted", linewidth = 1.2) +
+  #geom_vline(aes(xintercept = t_treat_since_inf,  color = t_treat),linetype = "dotted", linewidth = 1.2) +
+  geom_vline(aes(xintercept = 5.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_vline(aes(xintercept = 10.2), color = "green",linetype = "dotted", linewidth = 1) +
+  geom_hline(aes(yintercept = 1.31),color = "grey",linetype = "dotted", size = 1) +
+  labs(
+    x = "Days after Infection",
+    y = "log10 Viral Load (RNA copies/ml)",
+    
+  ) +
+  theme_minimal() +
+   theme(axis.text = element_text(colour = "black"),
+        axis.ticks = element_line(colour = "black"),
+        axis.line = element_line(colour = "black"),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        legend.position='bottom',
+        axis.title.y = element_text(size=11,family="sans"),
+        axis.title.x = element_text(size=11,family="sans"),
+  theme_minimal() 
+  ) +
+  theme(
+ # plot.title = element_text(size = 16),         
+  axis.title.x = element_text(size = 14),        
+  axis.title.y = element_text(size = 14),       
+  axis.text = element_text(size = 14) ,         
+  legend.title = element_text(size = 14), 
+  legend.text = element_text(size = 12),
+  plot.margin = margin(t = 0.5, r = 0.5, b = 0.5, l = 0.5, unit = "cm")
+) + ylim(-2,11) + xlim(0,30)
+plot_pop2
 ```
 
