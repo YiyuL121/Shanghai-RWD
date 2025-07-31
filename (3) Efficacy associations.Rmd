@@ -549,4 +549,3 @@ plot_pop2 <- ggplot(age_treat, aes(x = times, y = Mean50, fill = age)) +
 ) + ylim(-2,11) + xlim(0,30)
 plot_pop2
 ```
-
