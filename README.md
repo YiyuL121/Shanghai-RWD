@@ -11,3 +11,4 @@ The Code(R) includes following sections:
 
 ### Data
    - Monolix output (selected 458 patients): population parameters, estimated individual parameters, simulated individual parameters
+   - Average individual efficacy of 229 treatment-group individuals
