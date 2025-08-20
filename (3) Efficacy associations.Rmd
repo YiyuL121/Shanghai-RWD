@@ -1,5 +1,5 @@
-##### This code perform regressions of treatment efficacy (as result of TREIV-PKPD Fitting) on Patients' characteristcs ####
-##### Also perform the regression of model parameters on Patients' characteristcs #####
+##### This code performs regressions of treatment efficacy (as a result of TREIV-PKPD Fitting) on Patients' characteristics ####
+##### Also perform the regression of model parameters on Patients' characteristics #####
 ##### Fig 4, S-Fig-4, S-Fig-5, S-FIg-6 ######
 
 ```{r}
@@ -17,7 +17,7 @@ estimate <- read.csv("estimatedIndividualParameters.txt")
 estimate <- estimate %>% filter(antiviral == 1)
 ```
 
-# read in individual efficacy which was calculated in previous section
+# read in individual efficacy, which was calculated inthe  previous section
 ```{r}
 ind_eff <- read.csv("ind_eff.csv")
 ind_eff
@@ -281,7 +281,7 @@ agedose_plot
 #############################################################
 
 ####### reload the full parameters
-####### Use the individual parameters to compute the "mean" trajecotry for each subgourp
+####### Use the individual parameters to compute the "mean" trajectory for each subgroup
 
 ```{r}
 estimate_raw <- read.csv("estimatedIndividualParameters.txt")
