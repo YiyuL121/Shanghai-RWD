@@ -1,0 +1,130 @@
+################################################################
+######## Preprocess the raw data and perform matching ##########
+################################################################
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(gtsummary)
+library(gt)
+library(MatchIt)
+```
+
+```{r}
+load("combine_df.RData")
+combine_df_factor <- combine_df %>%
+  mutate(across(where(is.character), as.factor))
+summary(combine_df_factor)
+```
+
+############# Extract information we need ###############
+```{r}
+combine_df_clean <- combine_df %>%
+  mutate(age_cat = case_when(
+    age < 65 ~ "18-64",
+    #age >= 65 & age < 80 ~ "65-79",
+    age >= 65 ~ ">=65"),
+    age_cat = factor(age_cat, levels = c("18-64",">=65")),
+    #age_cat = factor(age_cat, levels = c("18-59","60-79",">=80")),
+    vaccination = case_when(
+      vax_doses == 0 | vax_doses == 1 ~ "Notfull",
+      vax_doses == 2 ~ "Full",
+      vax_doses == 3 ~ "Booster"),
+    vaccination = factor(vaccination, levels = c("Notfull","Full","Booster")),
+    Severity = factor(Severity, levels = c("Mild","Severe","Critical","Death")),
+    comorbidity_sum = coalesce((mh_hyp*1) + 
+                           (mh_dm*1) +
+                           (mh_cvd*1) +
+                           (mh_haemato*1) + # include malignancy? Lymphoma*2/Leukemia*2
+                           (mh_kidney*1) + # 1 = kidney disease
+                           (mh_neurolo*1) + # some are the same as cvd
+                           (mh_pulmonary*1) +
+                           (mh_malignancy*1) +
+                           (mh_liver*1) + # need to exclude severe liver disease based on text
+                           (mh_rheumatolo*1) +  
+                           (mh_HIV*1), 0),
+    comorbidity_cat = case_when(
+      comorbidity_sum == 0 ~ "0",
+      #comorbidity_sum == 1 ~ "1",
+      #comorbidity_sum == 2 ~ "2",
+      comorbidity_sum >= 1 ~ ">=1"),
+    comorbidity_cat = factor(comorbidity_cat, levels = c("0",">=1")),
+    t_hosp = as.numeric(difftime(hosp_adm_date, epi_screen_date, units = "days")),
+    t_treat = as.numeric(difftime(med_antiviral_date, epi_screen_date, units = "days")),
+    t_treat = if_else(is.na(t_treat), 50, t_treat),
+    T_treat = t_treat,
+    Antiviral = if_else(med_antiviral_whe == 0 | is.na(med_antiviral_whe), 0, med_antiviral_whe),
+    antiviral = Antiviral,
+    Group = as.factor(ifelse(med_antiviral_whe==0 | is.na(med_antiviral_whe),"Control", "Treatment")),
+    ref_date = if_else(med_antiviral_whe == 0 | is.na(med_antiviral_whe),
+                       as.Date(epi_screen_date) + 4,
+                       med_antiviral_date),
+    ref_severity = case_when(
+      (pgs_oxy == 0) | (pgs_oxy_date - ref_date > 0) ~ "Mild",
+      (pgs_oxy == 1 & (pgs_oxy_date - ref_date <= 0)) & (pgs_cri == 0 | (pgs_cri == 1 & (pgs_cri_date - ref_date > 0))) ~ "Severe",
+      (pgs_cri == 1 & (pgs_cri_date - ref_date <= 0)) & (pgs_death == 0 | (pgs_death == 1 & (pgs_death_date - ref_date < 0))) ~ "Critical",
+      TRUE ~ "Death"),
+    PCR_date = as.POSIXct(PCR_date, origin = "1970-01-01", tz = "UTC"),
+    PCR_N_.Ct = pmin(PCR_N_.Ct, 40),
+    VL = -0.32*as.numeric(PCR_N_.Ct)+14.11,
+    censor = if_else(PCR_N_.Ct == 40, 1, 0),
+    Day_since_detection = as.numeric(difftime(PCR_date, epi_screen_date, units = "days"))) %>%
+  group_by(hosp_id) %>%
+  mutate(init_VL = first(VL[order(Day_since_detection)]),
+         init_posit_VL = first(VL[VL > DL & order(Day_since_detection)]),
+         ref_VL = first(VL[PCR_date >= ref_date])) %>%
+  ungroup() %>%
+  group_by(hosp_id, PCR_date) %>%
+      mutate(
+        Day_since_detection = case_when(
+          n() == 2 & PCR_seq == max(PCR_seq) ~ Day_since_detection + 0.5,# For 2 replicates
+          n() == 3 & PCR_seq == median(PCR_seq) ~ Day_since_detection + 0.3, # For 3 replicates
+          n() == 3 & PCR_seq == max(PCR_seq) ~ Day_since_detection + 0.7,  # For 3 replicates
+          TRUE ~ Day_since_detection)) %>%
+      ungroup() %>%
+      filter(!is.na(VL),
+             !(mh_kidney %in% c(2,3)) & !(mh_liver == 1),
+             !(is.na(epi_screen_date) |
+                 (pgs_oxy == 1 & is.na(pgs_oxy_date)) |
+                 (pgs_cri == 1 & is.na(pgs_cri_date))),
+             (t_treat == 50 | t_treat <= 7),
+             #(t_hosp <= 3),
+             ref_severity == "Mild") %>%
+  select(c(hosp_id,age,age_cat,sex,vax_doses,vaccination,comorbidity_sum,comorbidity_cat,Severity,
+           epi_screen_date,hosp_adm_date,Antiviral,antiviral,med_antiviral_date,ref_date,Group,t_hosp,t_treat,T_treat,
+           init_VL,init_posit_VL,ref_VL,PCR_date,VL,censor,Day_since_detection)) #Day_since_symptom))
+```
+```{r}
+uniqueID_df <- combine_df_clean %>%
+  group_by(hosp_id) %>%
+  slice(1) %>% 
+  ungroup()
+uniqueID_df
+```
+
+################### Matching #####################
+```{r}
+out <- matchit(Antiviral~age_cat+sex+vaccination+comorbidity_cat+init_VL,
+               data = uniqueID_df,
+               #distance = 'logit',
+               distance = 'rpart',#classification and regression tree
+               #distance = eps,
+               #distance = 'nnet',
+               #distance.options=list(size=16),
+               method = "optimal",
+               #caliper = 0.1,
+               #replace = TRUE,
+               ratio = 1
+               )
+
+out$model
+```
+
+```{r}
+mdata<-match.data(out)
+match_df <- combine_df_clean %>%
+  filter(hosp_id %in% mdata$hosp_id)
+match_df
+```
+
