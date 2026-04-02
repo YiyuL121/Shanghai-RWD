@@ -34,6 +34,7 @@ sample_pars_pop <- function(pop, num){
   log10_pop <- grep("^log10", pop$parameter)        # log10 in _pop
   log10_omega <- grep("omega_log10", pop$parameter)       # omega_log10
   
+  
   # Identify rows without log10
   non_log10_pop <- setdiff(grep("_pop$", pop$parameter), log10_pop)      # non-log10 _pop
   non_log10_omega <- setdiff(grep("^omega", pop$parameter), log10_omega)
@@ -53,19 +54,18 @@ sample_pars_pop <- function(pop, num){
     
     if (i <= length(log10_pop)){
       
-      mean_par <- pop$value[log10_pop[i]]
-      sd_par <- pop$value[log10_omega[i]]
-      lower <- mean_par-1.96*sd_par
-      upper <- mean_par+1.96*sd_par
-      pars[, i] <- 10^(rtnorm(n=num, mean=mean_par, sd=sd_par, lower=lower, upper=upper))
+      mean_par <- pop$value[log10_pop[i]]      # μ_log10
+      sd_par   <- pop$value[log10_omega[i]]    # ω_log10
+
+      log10_par <- rnorm(num, mean = mean_par, sd = sd_par)
+      pars[, i]    <- 10^(log10_par)
+
    
     } else if (i == length(log10_pop)+1 & length(log10_pop)+1 == n_delta ) {  # Sample for delta 
       
       mean_par <- pop$value[non_log10_pop[i-length(log10_pop)]]
       sd_par <- pop$value[non_log10_omega[i-length(log10_pop)]]
-      lower <- mean_par-1.96*sd_par
-      upper <- mean_par+1.96*sd_par
-      pars[, i] <- exp(rtnorm(n=num, mean=log(mean_par), sd=sd_par, lower=log(lower), upper=log(upper)))
+      pars[, i] <- exp(rnorm(n=num, mean=log(mean_par), sd=sd_par))
     
     } else if (i == length(log10_pop)+2 & length(log10_pop)+2 == n_tau) {  # Sample for tau
       logit <- function(p) log(p / (20 - p))
@@ -74,20 +74,19 @@ sample_pars_pop <- function(pop, num){
       sd_par <- pop$value[non_log10_omega[i-length(log10_pop)]]
       pars[, i] <- (inv_logit(rnorm(n=num, mean=logit(mean_par), sd=sd_par)))  # incubation period ranges from 0 to 20
       
-    } else if (i == length(log10_pop)+3 & length(log10_pop)+3 == n_prf ) {  # Sample for prf
+    } else if (i == length(log10_pop)+3 & length(log10_pop)+3 == n_prf ) {  # Sample for IC50
       
       mean_par <- pop$value[non_log10_pop[i-length(log10_pop)]]
       sd_par <- pop$value[non_log10_omega[i-length(log10_pop)]]
-      lower <- mean_par-1.96*sd_par
-      upper <- mean_par+1.96*sd_par
-      pars[, i] <- exp(rtnorm(n=num, mean=log(mean_par), sd=sd_par, lower=log(lower), upper=log(upper)))
+      pars[, i] <- exp(rnorm(n=num, mean=log(mean_par), sd=sd_par))
     }
   }    
+  
   return(pars)
 
 }    
 ```
-
+  
 ########### TREIV-PKPD FUNCTION #############
 ```{r}
 
@@ -99,11 +98,12 @@ Intfun_ept_hill <- function(pars, t_treat, antiviral) {
   rho <- as.numeric(pars[4])
   delta <- as.numeric(pars[5])
    # To be estimated
-  tau <- round(as.numeric(pars[6]),digit=0)    # round the tau, as the same digit of stepsize
+  tau <- round(as.numeric(pars[6]),digit=1)    # round the tau, as the same digit of stepsize
   #tau <- 1 #population one
-  prf <- as.numeric(pars[7])
+  IC50 <- as.numeric(pars[7])
   
   A <- round(antiviral, digit = 0)
+  
   # Fixed PKPD parameters from the paper
    
   E_max <- 0.999
@@ -114,7 +114,6 @@ Intfun_ept_hill <- function(pars, t_treat, antiviral) {
   Vol <- 41743
   MolMass <- 499.5
   n <- 3.16
-  IC50 <- 0.083  # in µM (43.6 nM converted)
   Dose <- 300     # in mg
   
   # Time settings
@@ -127,7 +126,7 @@ Intfun_ept_hill <- function(pars, t_treat, antiviral) {
   
   # Treatment indicator (Antiviral == 1 during treatment window)
   treatment <- data.frame(times = times, h = rep(0, length(times)))
-  treatment$h <- ifelse(times >= rec & times < rec + 5, A, 0)  # 5-day treatment
+  treatment$h <- ifelse(times >= rec, A, 0)  # 5-day treatment
   h_t2 <- approxfun(treatment$times, treatment$h, rule = 2)
   
   # Dosing events: 300 mg every 12 hours (0.5 days) for 5 days (10 doses)
@@ -150,7 +149,7 @@ Intfun_ept_hill <- function(pars, t_treat, antiviral) {
       C_P_uM <- C_P_mg_per_mL * (1e6 / MolMass)
       
       # Compute efficacy (eps)
-      eps <- E_max * (C_P_uM^n) / ((prf * IC50)^n + C_P_uM^n)
+      eps <- E_max * (C_P_uM^n) / ((IC50)^n + C_P_uM^n)
       
       # Apply treatment window (eps_t)
       eps_t <- ifelse(h2 == 1, eps, 0)
@@ -174,6 +173,7 @@ Intfun_ept_hill <- function(pars, t_treat, antiviral) {
   out_df <- as.data.frame(cbind(time = out[,1], aV1 = log10(out[,6]), eps_t = out[,"eps_t"], Ap = out[,8]))
   
   return(out_df)
+  
 }
 ```
 
@@ -208,6 +208,23 @@ ComputeEave <- function( out, t) {  #t = time of treatment since INFECTION
   
   return(E_ave)
 }
+```
+#####################################################
+######### Calculate population efficacy #############
+#####################################################
+
+```{r}
+sample <- pop $value
+par_samp <- c(beta = 10^as.numeric(sample[1]), pi = 10^as.numeric(sample[2]), phi =10^as.numeric(sample[3]),
+          rho = 10^as.numeric(sample[4]), delta = as.numeric(sample[5]), tau = as.numeric(sample[6]), IC50 = as.numeric(sample[7]))
+par_samp
+t_1 <- 3
+tau_1 <- round((par_samp[6]),digit=1)
+# Run the simulation
+result <- Intfun_ept_hill(par_samp, t_1,1)
+# Compute E_ave
+E_ave <- ComputeEave(result, t_1+tau_1)
+print(paste("Average efficacy (E_ave):", E_ave))
 ```
 
 ######## Function to store data in column format ############
@@ -244,9 +261,6 @@ Tmax <- 40
 step_size <- 0.1
 times<-c(seq(Tmin,Tmax,step_size))
 
-#inv_logit <- function(x) exp(x) / (1 + exp(x))
-#inv_logit_20 <- function(x) 20*exp(x) / (1 + exp(x))
-
 pb <- txtProgressBar(min = 0, max = 4, style = 3)
 
 Fit <- list()
@@ -258,21 +272,21 @@ for (g in 1:4){
   t_treat <- df_cov$t_treat[g]
   antiviral <- df_cov$antiviral[g]
   
-  pars <- c(beta=10^pop$value[1],  
+  pars <- c(beta=10^pop$value[1],
            pi=10^pop$value[2],
            phi=10^pop$value[3],
            rho=10^pop$value[4],
            delta=pop$value[5],
            tau=pop$value[6],
-           prf=pop$value[7])
+           IC50=pop$value[7])
   
-  t_treat_since_inf <- t_treat +  round(pop$value[6], digit =0 )
+  t_treat_since_inf <- t_treat +  round(pop$value[6], digit =1)
   
-  fit <- Intfun_ept_hill(pars, t = t_treat, antiviral)
+fit <- Intfun_ept_hill(pars, t = t_treat, antiviral)
 
-  best_fit <- fit[,c(1,2)]
-  efficacy <- fit[,3]
-  Drug_conc <- fit[,4]
+best_fit <- fit[,c(1,2)]
+efficacy <- fit[,3]
+Drug_conc <- fit[,4]
   pars <- sample_pars_pop(pop, num)
   total_VL <- run_ODE_control(pars,t_treat, antiviral)
   
@@ -410,12 +424,13 @@ plot_pop_drug
 ######### Read in the individual parameters
 ```{r}
 Est <- read.csv("estimatedIndividualParameters.txt")
-#Original <- read.csv("Paxlovid_match_rpart.csv", row.names = 1)
+#Original <- read.csv("Paxlovid_match_rpart.csv", row.names = 1)  # Not publicly available
 Sim <- read.csv("simulatedIndividualParameters.txt")
 ```
 
 
 ############### Function ###################
+
 ```{r}
 Intfun_ind_pkpd <-function(pars){
   
@@ -426,7 +441,7 @@ Intfun_ind_pkpd <-function(pars){
   rho <- 10^as.numeric(pars[4])
   delta <- as.numeric(pars[5])
   tau <- as.numeric(pars[6])
-  prf <- as.numeric(pars[7])
+  IC50 <- as.numeric(pars[7])
   
   Antiviral <- as.numeric(pars[8])
   t_treat <-as.numeric(pars[9])
@@ -442,7 +457,6 @@ Intfun_ind_pkpd <-function(pars){
   Vol <- 41743
   MolMass <- 499.5
   n <- 3.16
-  IC50 <- 0.083  # in µM (43.6 nM converted)
   Dose <- 300     # in mg
   
   # Time settings
@@ -459,7 +473,7 @@ Intfun_ind_pkpd <-function(pars){
   
   treatment <- data.frame(times = times, h = rep(0, length(times)))
   #treatment$h <- ifelse(times < rec, 0, 1)
-  treatment$h <- ifelse(times < rec | times > rec + 5, 0, 1) * Antiviral #5day treatment
+  treatment$h <- ifelse(times < rec, 0, 1) * Antiviral #5day treatment
   
   
   h_t2 <- approxfun(treatment$times, treatment$h, rule = 2)
@@ -482,7 +496,7 @@ Intfun_ind_pkpd <-function(pars){
       C_P_uM <- C_P_mg_per_mL * (1e6 / MolMass)
       
       # Compute efficacy (eps)
-      eps <- E_max * (C_P_uM^n) / ((prf * IC50)^n + C_P_uM^n)
+      eps <- E_max * (C_P_uM^n) / ((IC50)^n + C_P_uM^n)
       
       # Apply treatment window (eps_t)
       eps_t <- ifelse(h2 == 1, eps, 0)
@@ -509,6 +523,8 @@ Intfun_ind_pkpd <-function(pars){
 }
 
 ```
+
+
 ############ Calculate individual efficacy ###############
 ```{r}
 #Calculate the efficacy for everyone
@@ -539,17 +555,13 @@ print(ind_eff)
 
 ########### Select subgroups of parameters for fittings #########
 ```{r}
-selected_sim <- Sim %>%
-  dplyr::select(log10beta,log10pi,log10phi,log10rho,delta,tau,prf,antiviral,T_treat,id) %>%
-  rename(ID=id)
-selected_sim
 mode_pars <- data.frame(log10beta = Est$log10beta_mode,
   log10pi= Est$log10pi_mode,
   log10phi=Est$log10phi_mode,
   log10rho=Est$log10rho_mode,
   delta_mode=Est$delta_mode,
   tau_mode=Est$tau_mode,
-  prf_mode=Est$prf_mode,
+  IC50=Est$IC50_mode,
   Antiviral = Est$antiviral,
   t_treat = Est$T_treat,
   ID = Est$id
@@ -560,7 +572,6 @@ mode_pars
 ############ Individual Fits: plotting function ######################
 
 ```{r}
-
 ind_fit_plt1<-function(Estimated, Simulated, original){
   
   Fit <- list()
@@ -568,7 +579,8 @@ ind_fit_plt1<-function(Estimated, Simulated, original){
 
     pars <- Estimated[i,] #Est should be a mode parameter dataframe with correct orders of paramters
     
-    fitted <- Intfun_ind_pkpd(par
+    fitted <- Intfun_ind_pkpd(pars)
+    
     index <- which(fitted$aV1 < -2)[1]
     # Check if an index was found, and then replace the value
     if (!is.na(index)) {
@@ -583,9 +595,10 @@ ind_fit_plt1<-function(Estimated, Simulated, original){
       filter(hosp_id == Estimated$ID[i]) %>%
       mutate(Day_since_inf = Day_since_detection + round(as.numeric(pars["tau_mode"]) ), digit = 1)
     
-    S <- 50 ###50 repeats
+    S <- 50 #50 repeats
 
     P <- matrix(NA,nrow=Tmax*(1/step_size)+1,ncol=S) #pre-sym and after-sym
+    #P <- matrix(NA,nrow=(Tmax+1),ncol=S)
     
     for(j in 1:S){
       pars <- c(beta=10^Simulated$log10beta[j+S*(i-1)],
@@ -594,7 +607,7 @@ ind_fit_plt1<-function(Estimated, Simulated, original){
                 delta=Simulated$delta[j+S*(i-1)],
                 pi=10^Simulated$log10pi[j+S*(i-1)],
                 tau=Simulated$tau[j+S*(i-1)],
-                prf=Simulated$prf[j+S*(i-1)],
+                IC50=Simulated$IC50[j+S*(i-1)],
                 
                 Antiviral=Simulated$antiviral[j+S*(i-1)],
                 t_treat=Simulated$T_treat[j+S*(i-1)])
@@ -604,26 +617,34 @@ ind_fit_plt1<-function(Estimated, Simulated, original){
       P[,j] <- out$aV1
     }
     
-    Min95  <- apply(P,1,function(x){quantile(x,0.005,na.rm = TRUE)})
-    Min90  <- apply(P,1,function(x){quantile(x,0.05,na.rm = TRUE)})
-    Max90  <- apply(P,1,function(x){quantile(x,0.95,na.rm = TRUE)})
-    Max95  <- apply(P,1,function(x){quantile(x,0.995,na.rm = TRUE)})
+    Min95  <- apply(P,1,function(x){quantile(x,0.025,na.rm = TRUE)})
+    Min50  <- apply(P,1,function(x){quantile(x,0.25,na.rm = TRUE)})
+    Max50  <- apply(P,1,function(x){quantile(x,0.75,na.rm = TRUE)})
+    Max95  <- apply(P,1,function(x){quantile(x,0.975,na.rm = TRUE)})
     Mean50 <- apply(P,1,function(x){quantile(x,0.50,na.rm=T)})
-    fit <- cbind(d1,Min95,Min90,Max90,Max95,Mean50,Code)
+    fit <- cbind(d1,Min95,Min50,Max50,Max95,Mean50,Code)
     fit$Min95[fit$Min95 < -2] <- -2
-    fit$Min90[fit$Min90 < -2] <- -2
+    fit$Min50[fit$Min50 < -2] <- -2
     fit <- merge(fit, original_subset[,c("hosp_id","Day_since_inf","VL")], by.x=c("Code", "time"), by.y = c("hosp_id", "Day_since_inf"),all=TRUE)
     
     Fit[[i]] <- data.frame(fit)
-    
     
   }
   
   ind_fit <- map_df(Fit, ~as.data.frame(.x))
   
+  
   ind_fit$Code <- as.factor(ind_fit$Code)
+
   return(ind_fit)
 }
+```
+
+```{r}
+selected_sim <- Sim %>%
+  dplyr::select(log10beta,log10pi,log10phi,log10rho,delta,tau,IC50,antiviral,T_treat,id) %>%
+  rename(ID=id)
+selected_sim
 ```
                               
 ```{r}
