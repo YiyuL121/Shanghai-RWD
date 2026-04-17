@@ -15,7 +15,7 @@ All analyses are implemented in R and organized into the following sections:
 
 ## Data Availability
 
-Due to patient privacy constraints, individual-level clinical data (viral load trajectories, demographics, and treatment records) are not publicly available.
+Due to patient privacy constraints, individual-level clinical data (viral load measures, demographics, and treatment records) are not publicly available.
 
 To support reproducibility, we provide the following Monolix model outputs, which are sufficient to replicate all downstream analyses from Part 2 onward:
 
@@ -24,9 +24,8 @@ To support reproducibility, we provide the following Monolix model outputs, whic
 - **`simulatedIndividualParameters.txt`** — Simulated individual parameters from the conditional distribution
 - **`ind_eff.csv`** — Average individual treatment efficacy estimates for 229 treated individuals
 
-These outputs enable full replication of the efficacy association analysis (Part 3) and sensitivity analysis (Part 4) without access to the raw data.
+These outputs enable full replication of the trajectory simulation (Part 2) and efficacy association analysis (Part 3) without access to the raw data.
 
-Researchers who wish to access the individual-level data for the purpose of replicating the model fitting step (Part 2) may contact the corresponding author to discuss a data use agreement.
 
 ## Model Specification
 
