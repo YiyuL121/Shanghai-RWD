@@ -523,7 +523,21 @@ Intfun_ind_pkpd <-function(pars){
 }
 
 ```
-
+########### Select subgroups of parameters for fittings #########
+```{r}
+mode_pars <- data.frame(log10beta = Est$log10beta_mode,
+  log10pi= Est$log10pi_mode,
+  log10phi=Est$log10phi_mode,
+  log10rho=Est$log10rho_mode,
+  delta_mode=Est$delta_mode,
+  tau_mode=Est$tau_mode,
+  IC50=Est$IC50_mode,
+  Antiviral = Est$antiviral,
+  t_treat = Est$T_treat,
+  ID = Est$id
+)
+mode_pars
+```
 
 ############ Calculate individual efficacy ###############
 ```{r}
@@ -553,21 +567,7 @@ close(pb)
 print(ind_eff)
 ```
 
-########### Select subgroups of parameters for fittings #########
-```{r}
-mode_pars <- data.frame(log10beta = Est$log10beta_mode,
-  log10pi= Est$log10pi_mode,
-  log10phi=Est$log10phi_mode,
-  log10rho=Est$log10rho_mode,
-  delta_mode=Est$delta_mode,
-  tau_mode=Est$tau_mode,
-  IC50=Est$IC50_mode,
-  Antiviral = Est$antiviral,
-  t_treat = Est$T_treat,
-  ID = Est$id
-)
-mode_pars
-```
+
 
 ############ Individual Fits: plotting function ######################
 
