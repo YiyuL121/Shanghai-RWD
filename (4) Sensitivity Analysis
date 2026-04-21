@@ -16,7 +16,7 @@ library(emmeans)
 
 #### read the data
 ```{r}
-estimate_fixedE <- read.csv("C:/Users/YIYU.LIAO/OneDrive - Nanyang Technological University/Desktop/Shanghai data/run/fixed eps/r2/IndividualParameters/estimatedIndividualParameters.txt")
+estimate_fixedE <- read.csv("estimatedIndividualParameters_fixedE.txt")
 estimate_fixedE <- estimate_fixedE %>% filter(antiviral == 1)
 estimate_fixedE$vaccination <- factor(estimate_fixedE$vaccination, levels = c("Notfull", "Full", "Booster"))
 estimate_fixedE$comorbidity_cat <- factor(estimate_fixedE$comorbidity_cat, levels = c("0", ">=1"))
