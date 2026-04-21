@@ -152,7 +152,7 @@ estimate_merge %>%
 ```{r}
 # Refit the multivariate regression
 linear_age_vax <- lm(E_ave ~ age_cat +sex + dose +comorbidity_cat, data = estimate_merge)
-summary(linear_age_cat)
+summary(linear_age_vax)
 ```
 ######### 4-A: Vaccination status ##########
 ```{r}
@@ -436,10 +436,10 @@ Full_Booster_ind_t <- subset(Full_Booster_ind, antiviral == 1)
 Full_Booster_ind_t
 ```
 ```{r}
-Full_treated <- ind_fit_plt2(full_ind_t[,c(16:22,38,36)])
-Not_Full_treated <- ind_fit_plt2(Not_Full_ind_t[,c(16:22,38,36)])
-Booster_treated <- ind_fit_plt2(Booster_ind_t[,c(16:22,38,36)])
-Full_Booster_treated <- ind_fit_plt2(Full_Booster_ind_t[,c(16:22,38,36)])
+Full_treated <- ind_fit_plt2(full_ind_t[,c(16:22,38,36)]) #This refers to the mode parameters + t_treat + antiviral
+Not_Full_treated <- ind_fit_plt2(Not_Full_ind_t[,c(16:22,38,36)]) #This refers to the mode parameters + t_treat + antiviral
+Booster_treated <- ind_fit_plt2(Booster_ind_t[,c(16:22,38,36)]) #This refers to the mode parameters + t_treat + antiviral
+Full_Booster_treated <- ind_fit_plt2(Full_Booster_ind_t[,c(16:22,38,36)]) #This refers to the mode parameters + t_treat + antiviral
 ```
 ```{r}
 #### Merge the results and ready to plot
@@ -499,8 +499,8 @@ young_ind_t <- subset(young_ind, antiviral == 1)
 young_ind_t
 ```
 ```{r}
-old_treated <- ind_fit_plt2(old_ind_t[,c(16:22,38,36)])
-young_treated <- ind_fit_plt2(young_ind_t[,c(16:22,38,36)])
+old_treated <- ind_fit_plt2(old_ind_t[,c(16:22,38,36)]) #This refers to the mode parameters + t_treat + antiviral
+young_treated <- ind_fit_plt2(young_ind_t[,c(16:22,38,36)])  #This refers to the mode parameters + t_treat + antiviral
 ```
 ```{r}
 old_treated$age <- ">=65"
